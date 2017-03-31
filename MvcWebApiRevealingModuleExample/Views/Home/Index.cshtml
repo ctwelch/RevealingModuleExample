@@ -1,0 +1,189 @@
+﻿@{ 
+    ViewBag.Title = "Revealing the Revealing Module Pattern";
+}
+
+<div id="exampleTableOutput">
+
+</div>
+
+<button id="createExample">Create Example</button>
+
+<div id="exampleEditOutput">
+
+</div>
+
+@*Handlebars Templates*@
+<script id="exampleTable" type="text/html">
+    <table>
+        <thead>
+            <th>The Word</th>
+            <th>Length</th>
+        </thead>
+        <tbody>
+            {{#each example}}
+            <tr data-id="{{Id}}">
+                <td>{{TheWord}}</td>
+                <td>{{Length}}</td>
+                <td>
+                    <button class="editExample">Edit</button>
+                    <button class="deleteExample">Delete</button>
+                </td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+</script>
+
+<script id="exampleEdit" type="text/html">
+    <hr />
+    <form>
+        <input type="hidden" name="id" id="id" value="{{Id}}" />
+        <label for="theWord">The Word:</label>
+        <input type="text" name="TheWord" id="theWord" required value="{{TheWord}}" />
+        <label for="length">Length</label>
+        <input type="number" min="0" max="200" name="Length" id="length" value="{{Length}}" />
+        <input type="submit" id="saveExample" />
+    </form>
+</script>
+
+@*END: Handlebars Templates*@
+
+@section scripts{
+    
+    
+    <script src="~/Scripts/handlebars.js"></script>
+    
+    <script>
+
+        var exampleServer = (function () {
+
+            var exampleApiUrl = '@Url.RouteUrl("DefaultApi", new { httproute = "", controller = "examples" })';
+
+            // a very basic error alert for test purposes
+            $(document).ajaxError(function (event, xhr) {
+                alert(xhr.status + ":" + xhr.statusText);
+            });
+
+            var getExamples = function () {
+                return $.ajax(exampleApiUrl);
+            }
+
+            var getExample = function (id) {
+                return $.ajax(exampleApiUrl + "/" + id);
+            };
+
+            var addExample = function (example) {
+                return $.ajax(exampleApiUrl, {
+                    type: "POST",
+                    data: example
+                });
+            };
+
+            var updateExample = function (example) {
+                return $.ajax(exampleApiUrl + "/" + example.Id, {
+                    type: "PUT",
+                    data: example
+                });
+            };
+
+            var removeExample = function (id) {
+                return $.ajax(exampleApiUrl + "/" + id, {
+                    type: "DELETE"
+                });
+            };
+
+            return {
+                getExamples: getExamples,
+                getExample: getExample,
+                updateExample: updateExample,
+                addExample: addExample,
+                removeExample: removeExample
+            };
+
+        }());
+
+        (function () {
+
+            var templates = {};
+
+            var compileTemplates = function () {
+                templates.exampleTable = Handlebars.compile($("#exampleTable").html());
+                templates.exampleEdit = Handlebars.compile($("#exampleEdit").html());
+            }
+
+            var showAllExamples = function (data) {
+                var output = templates.exampleTable({ example: data });
+                $("#exampleTableOutput").html(output);
+            };
+
+            var showExampleForEdit = function (example) {
+                var output = templates.exampleEdit(example);
+                $("#exampleEditOutput").html(output);
+            };
+
+            // with Handlebars you can define an HTML template
+            // and combine it with data and return it to the screen
+            // in lieu of building it using jQuery .each with the returned data and a bunch of appends
+            var refreshExamples = function () {
+                exampleServer.getExamples().done(showAllExamples);  // .done is going to pass the returned data into our callback
+            };
+
+            var editExample = function () {
+                var id = getId(this);
+                exampleServer.getExample(id).done(showExampleForEdit);
+            };
+
+            var clearEdit = function () {
+                $("#exampleEditOutput").empty();
+            };
+
+            var createExample = function () {
+                var example = { Id: 0, TheWord: "", Length: 0 };
+                showExampleForEdit(example);
+            };
+
+            // here we could use something like Knockout to do the binding, instead of doing it manually
+            var saveExample = function () {
+                var example = {
+                    "Id": $("#id").val(),
+                    "TheWord": $("#theWord").val(),
+                    "Length": $("#length").val()
+                };
+
+                var operation;
+
+                if (example.Id != "0") {
+                    operation = exampleServer.updateExample(example);
+                } else {
+                    operation = exampleServer.addExample(example);
+                }
+
+                operation.done(refreshExamples, clearEdit);
+                return false;
+            };
+
+            var deleteExample = function (id) {
+                exampleServer.removeExample(parseInt(id, 10)).done(refreshExamples);
+            }
+
+            var wireEvents = function () {
+                $(document).on("click", ".editExample", editExample);
+                $(document).on("click", "#saveExample", saveExample);
+                $(document).on("click", "#createExample", createExample);
+                $(document).on("click", ".deleteExample", deleteExample);
+            };
+
+            var getId = function (element) {
+                return $(element).parents("tr").attr("data-id");
+            };
+
+            $(function () {
+                wireEvents(); // be able to respond with our code here to page events
+                compileTemplates();
+                refreshExamples();
+            });
+
+        }());
+
+    </script>    
+}
